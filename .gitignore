@@ -4,6 +4,7 @@
 .idea
 .bsp
 target/
+*.env
 
 # Compile results
 target/**
