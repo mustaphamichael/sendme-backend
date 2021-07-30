@@ -6,6 +6,8 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directives.pathPrefix
 import akka.http.scaladsl.server.Route
 import com.sendme.backend.config.HttpConfig
+import com.sendme.backend.data.repository.{ AccountRepository, UserRepository }
+import com.sendme.backend.routes.AuthRoute
 import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 
@@ -21,8 +23,13 @@ class Service {
   private val config     = ConfigFactory.load()
   private val httpConfig = HttpConfig.getConfig(config)
 
+  private val userRepo    = UserRepository()
+  private val accountRepo = AccountRepository()
+
+  private val authRoute = AuthRoute(userRepo, accountRepo).route
+
   // routes
-  private val serviceRoutes: Route = pathPrefix("/api") { ??? }
+  private val serviceRoutes: Route = pathPrefix("api") { authRoute }
 
   val bindFuture: Future[Http.ServerBinding] = {
     log.info("Service running on [{}]:[{}]", httpConfig.host, httpConfig.port)
