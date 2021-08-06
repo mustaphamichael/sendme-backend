@@ -1,7 +1,8 @@
 package com.sendme.backend.data.repository
 
+import com.sendme.backend.config.SlickConfig
 import com.sendme.backend.data.DefaultEntity
-import com.typesafe.config.{ Config, ConfigFactory }
+import com.typesafe.config.ConfigFactory
 import slick.jdbc.JdbcBackend
 import slick.lifted
 
@@ -13,14 +14,14 @@ class SlickBackend[E](
 )(implicit ec: ExecutionContext) {
 
   val profile        = slick.jdbc.PostgresProfile
-  val config: Config = ConfigFactory.load().getConfig("database")
+  private val config = SlickConfig.getConfig(ConfigFactory.load())
 
   val database = JdbcBackend.Database.forURL(
-    url                 = config.getString("url"),
-    user                = config.getString("user"),
-    password            = config.getString("password"),
-    driver              = config.getString("driver"),
-    keepAliveConnection = config.getBoolean("keep-alive-connection")
+    url                 = config.url,
+    user                = config.username,
+    password            = config.password,
+    driver              = config.driver,
+    keepAliveConnection = config.keepAlive
   )
 
   import profile.api._

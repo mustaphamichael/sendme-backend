@@ -19,6 +19,12 @@ final case class Account(
   dateCreated: Instant
 ) extends DefaultEntity
 
+final case class UserResponsePayload(
+  id: Int,
+  name: String,
+  email: String
+)
+
 object User {
   def fromRequest(
     req: SignUpPayload
@@ -37,5 +43,13 @@ object User {
     userId      = user.id.getOrElse(0),
     balance     = 0,
     dateCreated = Instant.now
+  )
+
+  def response(
+    user: User
+  ): UserResponsePayload = UserResponsePayload(
+    id    = user.id.getOrElse(0),
+    name  = user.name,
+    email = user.email
   )
 }

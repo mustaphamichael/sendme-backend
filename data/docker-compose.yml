@@ -8,7 +8,19 @@ services:
     ports:
       - "5433:5432"
     env_file:
-      - ./secret.env
+      - ./.env
+
+  cache:
+    container_name: sendme_cache
+    image: redis
+    volumes:
+      - dbdata:/data/redis
+    ports:
+      - "6379:6379"
+    env_file:
+      - ./.env
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+
 
 volumes:
   dbdata:

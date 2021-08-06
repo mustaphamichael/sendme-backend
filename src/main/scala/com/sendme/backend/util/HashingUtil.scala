@@ -5,7 +5,9 @@ import com.github.t3hnar.bcrypt._
 import scala.util.Try
 
 object HashingUtil {
-  def hashPassword(plainString: String): Try[String] = plainString.bcryptSafe(10)
+  def hashPassword(
+    plainString: String
+  ): Try[String] = plainString.bcryptSafe(10)
 
   def verifyHash(
     plainString: String,
