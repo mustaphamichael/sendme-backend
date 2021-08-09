@@ -1,5 +1,7 @@
 package com.sendme.backend.util
 
+import com.sendme.backend.config.JwtConfig
+import com.typesafe.config.ConfigFactory
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -7,17 +9,18 @@ class JwtGeneratorSpec extends AnyWordSpec with Matchers {
 
   "The JwtGenerator" should {
     "generate and decode jwt token " in {
-      val token = JwtGenerator.generateToken(email, audience)
+      val config    = JwtConfig.fromConfig(ConfigFactory.load())
+      val generator = JwtGenerator(config)
+      val token     = generator.generateToken(id, audience)
       for {
-        claim <- JwtGenerator.decodeToken(token)
+        claim <- generator.decodeToken(token)
       } {
-        assert(claim.content === s"""{"email":"$email"}""")
-        assert(claim.subject === Some(subject))
+        assert(claim.content === s"""{"id":"$id"}""")
+        assert(claim.audience === Some(Set(audience)))
       }
     }
   }
 
-  private val email    = "mm@email.com"
+  private val id       = "1"
   private val audience = "users"
-  private val subject  = "authentication"
 }

@@ -1,39 +1,40 @@
 package com.sendme.backend.util
 
-import com.typesafe.config.ConfigFactory
+import com.sendme.backend.config.JwtConfig
 import pdi.jwt.{ JwtAlgorithm, JwtCirce, JwtClaim }
 
 import java.time.Clock
 import scala.util.Try
 
-object JwtGenerator {
+class JwtGenerator(
+  config: JwtConfig
+) {
   implicit val clock: Clock = Clock.systemUTC()
 
-  private val config    = ConfigFactory.load().getConfig("security.jwt")
-  private val key       = config.getString("key")
-  private val algo      = JwtAlgorithm.HS512
-  private val expireAt  = config.getDuration("expiration").toSeconds
-  private val notBefore = config.getDuration("expire-not-before").toSeconds
-  private val issuer    = config.getString("issuer")
+  private val algo = JwtAlgorithm.HS512
 
   def generateToken(
-    email: String,
+    id: String,
     audience: String
   ): String = {
     val claim = JwtClaim()
-      .by(issuer)
+      .by(config.issuer)
       .to(audience)
-      .about(email)
-      .expiresIn(expireAt)
-      .startsIn(-notBefore)
+      .about(id)
+      .expiresIn(config.expireAt)
+      .startsIn(-config.notBefore)
       .issuedNow
-      .+("email", email)
+      .+("id", id)
 
-    JwtCirce.encode(claim, key, algo)
+    JwtCirce.encode(claim, config.key, algo)
   }
 
   def decodeToken(
     token: String
   ): Try[JwtClaim] =
-    JwtCirce.decode(token, key, Seq(algo))
+    JwtCirce.decode(token, config.key, Seq(algo))
+}
+
+object JwtGenerator {
+  def apply(config: JwtConfig) = new JwtGenerator(config)
 }

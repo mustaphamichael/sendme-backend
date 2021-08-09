@@ -1,7 +1,6 @@
 package com.sendme.backend.routes
 
-import akka.http.javadsl.model.headers.Authorization
-import akka.http.scaladsl.model.{ HttpHeader, StatusCodes }
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import com.sendme.backend.data.cache.CacheClient
@@ -19,6 +18,7 @@ import scala.util.{ Failure, Success }
 class AuthRoute(
   userRepository: UserRepository,
   userAccountRepository: AccountRepository,
+  jwtGenerator: JwtGenerator,
   cacheClient: CacheClient
 )(implicit ec: ExecutionContext) {
   import AuthRoute._
@@ -28,7 +28,8 @@ class AuthRoute(
   private val userRepo    = new userRepository.UserTableOps
   private val userAccount = new userAccountRepository.UserAccountTableOps
 
-  val route: Route = pathPrefix("auth") { signUpRoute ~ loginRoute ~ logoutRoute }
+  val route: Route  = pathPrefix("auth") { signUpRoute ~ loginRoute }
+  val logout: Route = pathPrefix("auth") { logoutRoute } // protected route
 
   private def signUpRoute: Route =
     path("signup") {
@@ -54,7 +55,7 @@ class AuthRoute(
                     SuccessResponse[AuthResponsePayload](
                       data = AuthResponsePayload(
                         user = User.response(user),
-                        auth = Auth.response(user)
+                        auth = Auth.response(user, jwtGenerator)
                       )
                     )
                   )
@@ -85,7 +86,7 @@ class AuthRoute(
                     SuccessResponse[AuthResponsePayload](
                       data = AuthResponsePayload(
                         user = User.response(user),
-                        auth = Auth.response(user)
+                        auth = Auth.response(user, jwtGenerator)
                       )
                     )
                   )
@@ -99,10 +100,9 @@ class AuthRoute(
   private def logoutRoute: Route =
     path("logout") {
       get {
-        // TODO: Extract 'email' claim from jwt
         log.info("Received request to logout user")
 
-        headerValue(extractAuthToken) { token =>
+        headerValueByName("token") { token =>
           onComplete(
             cacheClient.addElement(s"REVOKED_$token", "1", Some(1.hour))
           ) {
@@ -117,10 +117,6 @@ class AuthRoute(
       }
     }
 
-  private def extractAuthToken: HttpHeader => Option[String] = {
-    case auth: Authorization => Some(auth.value())
-    case _                   => None
-  }
 }
 
 object AuthRoute {
@@ -148,9 +144,10 @@ object AuthRoute {
 
   object Auth {
     def response(
-      user: User
+      user: User,
+      jwtGenerator: JwtGenerator
     ): Auth = Auth(
-      access_token = JwtGenerator.generateToken(user.email, "User")
+      access_token = jwtGenerator.generateToken(user.id.getOrElse(0).toString, "User")
     )
   }
 
@@ -162,7 +159,8 @@ object AuthRoute {
   def apply(
     userRepository: UserRepository,
     userAccountRepository: AccountRepository,
+    jwtGenerator: JwtGenerator,
     cacheClient: CacheClient
   )(implicit ec: ExecutionContext): AuthRoute =
-    new AuthRoute(userRepository, userAccountRepository, cacheClient)
+    new AuthRoute(userRepository, userAccountRepository, jwtGenerator, cacheClient)
 }
