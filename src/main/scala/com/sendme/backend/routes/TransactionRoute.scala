@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import com.sendme.backend.data.Transaction
-import com.sendme.backend.routes.TransactionRoute.{ OutgoingPayload, SendMoneyPayload }
+import com.sendme.backend.routes.TransactionRoute.{ AddMoneyPayload, OutgoingPayload, SendMoneyPayload }
 import com.sendme.backend.service.transaction.TransactionService
 import com.sendme.backend.util.{ ApiException, FailureResponse, SuccessResponse }
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
@@ -20,7 +20,7 @@ class TransactionRoute(
 )(implicit ec: ExecutionContext) {
   private val log = LoggerFactory.getLogger(getClass.getName)
 
-  val route: Route = pathPrefix("transaction") { sendMoney }
+  val route: Route = pathPrefix("transactions") { sendMoney ~ addMoney }
 
   private def sendMoney: Route =
     path("send-money") {
@@ -40,13 +40,36 @@ class TransactionRoute(
                 complete(StatusCodes.InternalServerError)
               case Success(transaction)                   =>
                 complete(
-                  SuccessResponse(data = OutgoingPayload.sendMoney(req.receiver_id, transaction))
+                  SuccessResponse(data = OutgoingPayload.sendMoney(transaction))
                 )
             }
           }
         }
       }
     }
+
+  private def addMoney(): Route =
+    path("add-money") {
+      post {
+        entity(as[AddMoneyPayload]) { req =>
+          log.info("Received request to add money to account [{}]", req.account_id)
+
+          onComplete(
+            transactionService.addMoney(req.amount, req.account_id)
+          ) {
+            case Failure(ApiException(status, message)) =>
+              log.warn("Adding money into account [{}] failed with [{}]", req.account_id, message)
+              complete(status, FailureResponse(message))
+            case Failure(exception)                     =>
+              log.warn("Adding money into account [{}] failed with [{}]", req.account_id, exception)
+              complete(StatusCodes.InternalServerError)
+            case Success(transaction)                   =>
+              complete(SuccessResponse(data = OutgoingPayload.addMoney(transaction)))
+          }
+        }
+      }
+    }
+
 }
 
 object TransactionRoute {
@@ -58,26 +81,42 @@ object TransactionRoute {
     receiver_id: Int
   ) extends IncomingPayload
 
+  final case class AddMoneyPayload(
+    amount: Double,
+    account_id: Int
+  ) extends IncomingPayload
+
   final case class SendMoneyResponse(
-    receiver_id: Int,
     transaction_code: String,
     transaction_amount: Double,
     transaction_status: String,
-    transaction_description: String,
+    transaction_date: Instant
+  ) extends OutgoingPayload
+
+  final case class AddMoneyResponse(
+    transaction_code: String,
+    transaction_amount: Double,
+    transaction_status: String,
     transaction_date: Instant
   ) extends OutgoingPayload
 
   object OutgoingPayload {
     def sendMoney(
-      receiverId: Int,
       transaction: Transaction
     ): SendMoneyResponse = SendMoneyResponse(
-      receiver_id             = receiverId,
-      transaction_code        = transaction.code,
-      transaction_amount      = transaction.amount,
-      transaction_status      = transaction.status,
-      transaction_description = transaction.description,
-      transaction_date        = transaction.dateCreated
+      transaction_code   = transaction.code,
+      transaction_amount = transaction.amount,
+      transaction_status = transaction.status,
+      transaction_date   = transaction.dateCreated
+    )
+
+    def addMoney(
+      transaction: Transaction
+    ): AddMoneyResponse = AddMoneyResponse(
+      transaction_code   = transaction.code,
+      transaction_amount = transaction.amount,
+      transaction_status = transaction.status,
+      transaction_date   = transaction.dateCreated
     )
   }
 

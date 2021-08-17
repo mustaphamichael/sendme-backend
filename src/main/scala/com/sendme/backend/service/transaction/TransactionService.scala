@@ -3,6 +3,7 @@ package com.sendme.backend.service.transaction
 import akka.http.scaladsl.model.StatusCodes._
 import com.sendme.backend.data.{ Account, AddMoney, Failed, SendMoney, Successful, Transaction, User }
 import com.sendme.backend.data.repository.{ AccountRepository, TransactionRepository, UserRepository }
+import com.sendme.backend.service.payment.PaymentClient
 import com.sendme.backend.util.ApiException
 
 import scala.concurrent.{ ExecutionContext, Future }
@@ -10,7 +11,8 @@ import scala.concurrent.{ ExecutionContext, Future }
 class TransactionService(
   userRepository: UserRepository,
   accountRepository: AccountRepository,
-  transactionRepository: TransactionRepository
+  transactionRepository: TransactionRepository,
+  paymentClient: PaymentClient
 )(implicit ec: ExecutionContext) {
 
   private val userRepo        = new userRepository.UserTableOps
@@ -68,7 +70,7 @@ class TransactionService(
   private def getUserInfoAndAccount(userId: Int): Future[(User, Account)] =
     (for {
       user <- userRepo.findById(userId)
-      account <- accountRepo.findByUser(userId)
+      account <- accountRepo.findOneByUser(userId)
     } yield (user, account)).flatMap {
       case (None, None)                => Future.failed(ApiException(NotFound, "Invalid account"))
       case (Some(user), Some(account)) => Future.successful(user -> account)
@@ -81,14 +83,38 @@ class TransactionService(
     } yield decrement + increment >= 2
 
   /** Top up user account */
-  def addMoney(user: User, amount: Double): Future[Transaction] = ???
+  def addMoney(amount: Double, accountId: Int): Future[Transaction] = {
+    if (amount < 100.0) Future.failed(ApiException(BadRequest, "Amount should not be lower than 100.00"))
+    else {
+      accountRepo.findById(accountId).flatMap {
+        case None          =>
+          Future.failed(ApiException(NotFound, "The account could not be found"))
+        case Some(account) =>
+          paymentClient.receivePayment(amount, account).flatMap { _ =>
+            val transaction = Transaction.create(
+              accountId       = account.id.getOrElse(0),
+              amount          = amount,
+              transactionType = AddMoney,
+              status          = Successful,
+              description     = "Added money to account"
+            )
+
+            for {
+              _ <- accountRepo.updateAmount(accountId, amount)
+              transaction <- transactionRepo.create(transaction)
+            } yield transaction
+          }
+      }
+    }
+  }
 }
 
 object TransactionService {
   def apply(
     userRepository: UserRepository,
     accountRepository: AccountRepository,
-    transactionRepository: TransactionRepository
+    transactionRepository: TransactionRepository,
+    paymentClient: PaymentClient
   )(implicit ec: ExecutionContext) =
-    new TransactionService(userRepository, accountRepository, transactionRepository)
+    new TransactionService(userRepository, accountRepository, transactionRepository, paymentClient)
 }

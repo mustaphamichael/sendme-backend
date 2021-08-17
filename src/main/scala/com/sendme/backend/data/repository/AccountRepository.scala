@@ -23,7 +23,7 @@ class AccountRepository(implicit ec: ExecutionContext) extends SlickBackend[User
     def updateAmount(
       userId: Int,
       amount: Double
-    ): Future[Int] = findByUser(userId).flatMap {
+    ): Future[Int] = findOneByUser(userId).flatMap {
       case None          =>
         Future.failed(new Exception("The user does not exist"))
       case Some(account) =>
@@ -31,8 +31,11 @@ class AccountRepository(implicit ec: ExecutionContext) extends SlickBackend[User
         database.run(q.update(account.balance + amount))
     }
 
-    def findByUser(userId: Int): Future[Option[Account]] =
+    def findOneByUser(userId: Int): Future[Option[Account]] =
       database.run(table.filter(_.userId === userId).result.headOption)
+
+    def findByUser(userId: Int): Future[Seq[Account]] =
+      database.run(table.filter(_.userId === userId).result)
   }
 }
 
