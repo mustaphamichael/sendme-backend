@@ -41,6 +41,20 @@ class SlickBackend[E](
 
     def findById(id: Int): Future[Option[D]] =
       database.run(table.filter(_.id === id).result.headOption)
+
+    /* Fetch all records with offset and limit */
+    def all(_limit: Option[Int], _page: Option[Int])(f: S => Rep[Boolean]): Future[Seq[D]] = {
+      val limit = _limit.getOrElse(10)
+      val page  = _page.getOrElse(1)
+      database.run(
+        table
+          .filter(f)
+          .sortBy(_.dateCreated.desc)
+          .drop(limit * (page - 1).abs)
+          .take(limit)
+          .result
+      )
+    }
   }
 }
 

@@ -35,7 +35,7 @@ class TransactionService(
           else
             sendMoneyTransaction(senderId, receiverId, amount).flatMap { success =>
               val senderTx = Transaction.create(
-                accountId       = senderAccount.id.get,
+                account         = senderAccount,
                 amount          = amount,
                 transactionType = SendMoney,
                 status          = Successful,
@@ -43,7 +43,7 @@ class TransactionService(
               )
               if (success) {
                 val receiverTx = Transaction.create(
-                  accountId       = receiverAccount.id.get,
+                  account         = receiverAccount,
                   amount          = amount,
                   transactionType = AddMoney,
                   status          = Successful,
@@ -72,7 +72,7 @@ class TransactionService(
       user <- userRepo.findById(userId)
       account <- accountRepo.findOneByUser(userId)
     } yield (user, account)).flatMap {
-      case (None, None)                => Future.failed(ApiException(NotFound, "Invalid account"))
+      case (None, None)                => Future.failed(ApiException(NotFound, "The account does not exist"))
       case (Some(user), Some(account)) => Future.successful(user -> account)
     }
 
@@ -92,7 +92,7 @@ class TransactionService(
         case Some(account) =>
           paymentClient.receivePayment(amount, account).flatMap { _ =>
             val transaction = Transaction.create(
-              accountId       = account.id.getOrElse(0),
+              account         = account,
               amount          = amount,
               transactionType = AddMoney,
               status          = Successful,
@@ -107,6 +107,15 @@ class TransactionService(
       }
     }
   }
+
+  def fetchTransactions(userId: Int, limit: Option[Int], page: Option[Int]): Future[Seq[Transaction]] =
+    transactionRepo.allByUser(userId, limit, page)
+
+  def fetchTransactionsByAccount(accountId: Int, limit: Option[Int], page: Option[Int]): Future[Seq[Transaction]] =
+    transactionRepo.allByAccount(accountId, limit, page)
+
+  def fetchTransactionDetails(code: String): Future[Option[Transaction]] =
+    transactionRepo.findByCode(code)
 }
 
 object TransactionService {

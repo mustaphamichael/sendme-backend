@@ -20,7 +20,13 @@ class TransactionRoute(
 )(implicit ec: ExecutionContext) {
   private val log = LoggerFactory.getLogger(getClass.getName)
 
-  val route: Route = pathPrefix("transactions") { sendMoney ~ addMoney }
+  val route: Route         = pathPrefix("transactions") {
+    sendMoney ~ addMoney ~ getTransactionDetails ~ recordsRoute
+  }
+  private val recordsRoute =
+    parameters("limit".as[Int].optional, "page".as[Int].optional) { (limit, page) =>
+      getTransactions(limit, page) ~ getAccountTransactions(limit, page)
+    }
 
   private def sendMoney: Route =
     path("send-money") {
@@ -70,6 +76,64 @@ class TransactionRoute(
       }
     }
 
+  private def getTransactions(limit: Option[Int], page: Option[Int]): Route =
+    pathEndOrSingleSlash {
+      get {
+        headerValueByName("id") { userId =>
+          log.info("Received request to fetch transactions for user [{}]", userId)
+
+          onComplete(
+            transactionService.fetchTransactions(userId.toInt, limit, page)
+          ) {
+            case Failure(exception)    =>
+              log.warn("Fetching transactions failed with [{}]", exception)
+              complete(StatusCodes.InternalServerError)
+            case Success(transactions) =>
+              complete(SuccessResponse(data = transactions.map(OutgoingPayload.transactionInfo)))
+          }
+        }
+      }
+    }
+
+  private def getAccountTransactions(limit: Option[Int], page: Option[Int]): Route =
+    path("account" / IntNumber) { accountId =>
+      get {
+        log.info("Received request to fetch transactions for account [{}]", accountId)
+
+        onComplete(
+          transactionService.fetchTransactionsByAccount(accountId, limit, page)
+        ) {
+          case Failure(exception)    =>
+            log.warn("Fetching transactions failed with [{}]", exception)
+            complete(StatusCodes.InternalServerError)
+          case Success(transactions) =>
+            complete(SuccessResponse(data = transactions.map(OutgoingPayload.transactionInfo)))
+        }
+      }
+    }
+
+  private def getTransactionDetails: Route =
+    path(Segment) { code =>
+      get {
+        log.info("Received request to fetch transaction with code [{}]", code)
+
+        onComplete(
+          transactionService.fetchTransactionDetails(code)
+        ) {
+          case Failure(exception)   =>
+            log.warn("Fetching transaction failed with [{}]", exception)
+            complete(StatusCodes.InternalServerError)
+          case Success(transaction) =>
+            transaction match {
+              case None        =>
+                complete(StatusCodes.NotFound, FailureResponse("Transaction does not exist"))
+              case Some(value) =>
+                complete(SuccessResponse(data = value))
+            }
+        }
+      }
+    }
+
 }
 
 object TransactionRoute {
@@ -94,8 +158,18 @@ object TransactionRoute {
   ) extends OutgoingPayload
 
   final case class AddMoneyResponse(
+    account_id: Int,
     transaction_code: String,
     transaction_amount: Double,
+    transaction_status: String,
+    transaction_date: Instant
+  ) extends OutgoingPayload
+
+  final case class TransactionInfo(
+    account_id: Int,
+    transaction_code: String,
+    transaction_amount: Double,
+    transaction_type: String,
     transaction_status: String,
     transaction_date: Instant
   ) extends OutgoingPayload
@@ -113,8 +187,20 @@ object TransactionRoute {
     def addMoney(
       transaction: Transaction
     ): AddMoneyResponse = AddMoneyResponse(
+      account_id         = transaction.accountId,
       transaction_code   = transaction.code,
       transaction_amount = transaction.amount,
+      transaction_status = transaction.status,
+      transaction_date   = transaction.dateCreated
+    )
+
+    def transactionInfo(
+      transaction: Transaction
+    ): TransactionInfo = TransactionInfo(
+      account_id         = transaction.accountId,
+      transaction_code   = transaction.code,
+      transaction_amount = transaction.amount,
+      transaction_type   = transaction.transactionType,
       transaction_status = transaction.status,
       transaction_date   = transaction.dateCreated
     )

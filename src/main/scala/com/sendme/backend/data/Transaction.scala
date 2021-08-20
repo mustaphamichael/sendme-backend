@@ -5,6 +5,7 @@ import java.util.UUID
 
 case class Transaction(
   accountId: Int,
+  userId: Int,
   code: String,
   amount: Double,
   transactionType: String,
@@ -15,13 +16,14 @@ case class Transaction(
 
 object Transaction {
   def create(
-    accountId: Int,
+    account: Account,
     amount: Double,
     transactionType: TransactionType,
     status: TransactionStatus,
     description: String
   ): Transaction = Transaction(
-    accountId       = accountId,
+    accountId       = account.id.getOrElse(0),
+    userId          = account.userId,
     code            = UUID.randomUUID().toString,
     amount          = amount,
     transactionType = transactionType.toString,

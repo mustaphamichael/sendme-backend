@@ -13,6 +13,7 @@ class TransactionRepository(implicit ec: ExecutionContext)
 
   final class TransactionSchema(tag: Tag) extends DefaultSchema[Transaction](tag) {
     def accountId              = column[Int]("account_id")
+    def userId                 = column[Int]("user_id")
     def transactionCode        = column[String]("transaction_code")
     def transactionAmount      = column[Double]("transaction_amount")
     def transactionType        = column[String]("transaction_type")
@@ -21,6 +22,7 @@ class TransactionRepository(implicit ec: ExecutionContext)
 
     def * = (
       accountId,
+      userId,
       transactionCode,
       transactionAmount,
       transactionType,
@@ -37,6 +39,12 @@ class TransactionRepository(implicit ec: ExecutionContext)
 
     def findByCode(code: String): Future[Option[Transaction]] =
       database.run(table.filter(_.transactionCode === code).result.headOption)
+
+    def allByUser(userId: Int, limit: Option[Int], page: Option[Int]): Future[Seq[Transaction]] =
+      all(limit, page)(_.userId === userId)
+
+    def allByAccount(accountId: Int, limit: Option[Int], page: Option[Int]): Future[Seq[Transaction]] =
+      all(limit, page)(_.accountId === accountId)
   }
 }
 
