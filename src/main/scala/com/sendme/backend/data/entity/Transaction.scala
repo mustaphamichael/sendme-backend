@@ -1,4 +1,4 @@
-package com.sendme.backend.data
+package com.sendme.backend.data.entity
 
 import java.time.Instant
 import java.util.UUID
@@ -24,7 +24,7 @@ object Transaction {
   ): Transaction = Transaction(
     accountId       = account.id.getOrElse(0),
     userId          = account.userId,
-    code            = UUID.randomUUID().toString,
+    code            = UUID.randomUUID().toString.toUpperCase,
     amount          = amount,
     transactionType = transactionType.toString,
     status          = status.toString,

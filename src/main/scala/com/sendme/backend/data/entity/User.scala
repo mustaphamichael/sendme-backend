@@ -1,4 +1,4 @@
-package com.sendme.backend.data
+package com.sendme.backend.data.entity
 
 import com.sendme.backend.routes.AuthRoute.SignUpPayload
 

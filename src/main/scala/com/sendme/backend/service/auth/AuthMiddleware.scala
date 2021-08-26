@@ -1,4 +1,4 @@
-package com.sendme.backend.service
+package com.sendme.backend.service.auth
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directive1

@@ -1,6 +1,6 @@
 package com.sendme.backend.service.payment
 
-import com.sendme.backend.data.Account
+import com.sendme.backend.data.entity.Account
 import com.sendme.backend.service.payment.providers.DemoProvider
 import com.typesafe.config.Config
 

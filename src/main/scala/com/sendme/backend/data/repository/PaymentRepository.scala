@@ -1,6 +1,6 @@
 package com.sendme.backend.data.repository
 
-import com.sendme.backend.data.Payment
+import com.sendme.backend.data.entity.Payment
 
 import scala.concurrent.{ ExecutionContext, Future }
 

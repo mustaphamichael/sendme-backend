@@ -1,6 +1,6 @@
 package com.sendme.backend.data.repository
 
-import com.sendme.backend.data.Account
+import com.sendme.backend.data.entity.Account
 
 import scala.concurrent.{ ExecutionContext, Future }
 
@@ -21,18 +21,15 @@ class AccountRepository(implicit ec: ExecutionContext) extends SlickBackend[User
     override def create(entity: Account): Future[Account] = super.create(entity)
 
     def updateAmount(
-      userId: Int,
+      accountId: Int,
       amount: Double
-    ): Future[Int] = findOneByUser(userId).flatMap {
+    ): Future[Int] = findById(accountId).flatMap {
       case None          =>
-        Future.failed(new Exception("The user does not exist"))
+        Future.failed(new Exception("The account does not exist"))
       case Some(account) =>
-        val q = for { a <- table if a.userId === userId } yield a.balance
+        val q = for { a <- table if a.userId === accountId } yield a.balance
         database.run(q.update(account.balance + amount))
     }
-
-    def findOneByUser(userId: Int): Future[Option[Account]] =
-      database.run(table.filter(_.userId === userId).result.headOption)
 
     def findByUser(userId: Int): Future[Seq[Account]] =
       database.run(table.filter(_.userId === userId).result)

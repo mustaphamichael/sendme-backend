@@ -1,7 +1,7 @@
 package com.sendme.backend.service.payment
 
 import akka.http.scaladsl.model.StatusCodes
-import com.sendme.backend.data.{ Account, Payment }
+import com.sendme.backend.data.entity.{ Account, Payment }
 import com.sendme.backend.data.repository.PaymentRepository
 import com.sendme.backend.service.payment.PaymentProfile.{ PaymentRequest, PaymentResponse }
 import com.sendme.backend.util.ApiException

@@ -1,7 +1,7 @@
 package com.sendme.backend.data.repository
 
 import com.sendme.backend.config.SlickConfig
-import com.sendme.backend.data.DefaultEntity
+import com.sendme.backend.data.entity.DefaultEntity
 import com.typesafe.config.ConfigFactory
 import slick.jdbc.JdbcBackend
 import slick.lifted
