@@ -9,6 +9,7 @@ val AkkaHttpVersion      = "10.2.4"
 val AkkaHttpCirceVersion = "1.36.0"
 val BcryptVersion        = "4.1"
 val CirceVersion         = "0.14.1"
+val EmbeddedRedisVersion = "0.7.3"
 val JwtCirceVersion      = "8.0.3"
 val LogbackVersion       = "1.2.3"
 val PostgresVersion      = "42.2.18"
@@ -33,7 +34,8 @@ libraryDependencies ++= Seq(
   // Logging
   "ch.qos.logback"        % "logback-classic"     % LogbackVersion,
   // Test
-  "com.typesafe.akka"    %% "akka-stream-testkit" % AkkaVersion      % Test,
-  "com.typesafe.akka"    %% "akka-http-testkit"   % AkkaHttpVersion  % Test,
-  "org.scalatest"        %% "scalatest"           % ScalaTestVersion % Test
+  "com.typesafe.akka"    %% "akka-stream-testkit" % AkkaVersion          % Test,
+  "com.typesafe.akka"    %% "akka-http-testkit"   % AkkaHttpVersion      % Test,
+  "org.scalatest"        %% "scalatest"           % ScalaTestVersion     % Test,
+  "it.ozimov"             % "embedded-redis"      % EmbeddedRedisVersion % Test
 )
