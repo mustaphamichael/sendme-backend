@@ -39,7 +39,7 @@ class AppRoute(
   private val authMiddleware = AuthMiddleware(cache, jwtGenerator)
   private val authRoute      = AuthRoute(authService)
 
-  private val transactionService = TransactionService(userRepo, accountRepo, transactionRepo, paymentClient)
+  private val transactionService = TransactionService(userRepo, accountRepo, transactionRepo, paymentClient, emailClient)
   private val transactionRoute   = TransactionRoute(transactionService)
 
   val routes: Route = pathPrefix("api") {

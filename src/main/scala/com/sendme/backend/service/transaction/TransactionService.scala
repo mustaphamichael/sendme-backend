@@ -1,8 +1,9 @@
 package com.sendme.backend.service.transaction
 
 import akka.http.scaladsl.model.StatusCodes._
-import com.sendme.backend.data.{ Account, AddMoney, Failed, SendMoney, Successful, Transaction, User }
+import com.sendme.backend.data.entity.{ Account, AddMoney, Failed, SendMoney, Successful, Transaction, User }
 import com.sendme.backend.data.repository.{ AccountRepository, TransactionRepository, UserRepository }
+import com.sendme.backend.service.email.EmailClient
 import com.sendme.backend.service.payment.PaymentClient
 import com.sendme.backend.util.ApiException
 
@@ -12,34 +13,45 @@ class TransactionService(
   userRepository: UserRepository,
   accountRepository: AccountRepository,
   transactionRepository: TransactionRepository,
-  paymentClient: PaymentClient
+  paymentClient: PaymentClient,
+  emailClient: EmailClient
 )(implicit ec: ExecutionContext) {
 
   private val userRepo        = new userRepository.UserTableOps
   private val accountRepo     = new accountRepository.UserAccountTableOps
   private val transactionRepo = new transactionRepository.TransactionTableOps
 
-  /** Send money to another user */
-  def sendMoney(senderId: Int, receiverId: Int, amount: Double): Future[Transaction] = {
+  /** Send money to another user
+    * 1- Confirm that the user initiating the transaction is the owner of the account
+    * 2. Check that the account has enough funds to proceed
+    */
+  def sendMoney(senderId: Int, senderAccountId: Int, receiverAccountId: Int, amount: Double): Future[Transaction] = {
     if (amount < 100.0) Future.failed(ApiException(BadRequest, "Amount should not be lower than 100.00"))
     else {
       (for {
-        sender <- getUserInfoAndAccount(senderId)
-        receiver <- getUserInfoAndAccount(receiverId)
-      } yield (sender, receiver)).flatMap {
+        senderInfo <- getUserInfoAndAccount(senderAccountId)
+        receiverInfo <- getUserInfoAndAccount(receiverAccountId)
+      } yield (senderInfo, receiverInfo)).flatMap {
         case (
               (sender, senderAccount),
               (receiver, receiverAccount)
             ) =>
-          if (senderAccount.balance < amount) Future.failed(ApiException(BadRequest, "Insufficient funds"))
+          if (sender.id.get != senderId)
+            Future.failed(
+              ApiException(
+                Unauthorized,
+                s"You do not have the permission to carry out this transaction, because account [$senderAccountId] does not belong to you"
+              )
+            )
+          else if (senderAccount.balance < amount) Future.failed(ApiException(BadRequest, "Insufficient funds"))
           else
-            sendMoneyTransaction(senderId, receiverId, amount).flatMap { success =>
+            sendMoneyTransaction(senderAccountId, receiverAccountId, amount).flatMap { success =>
               val senderTx = Transaction.create(
                 account         = senderAccount,
                 amount          = amount,
                 transactionType = SendMoney,
                 status          = Successful,
-                description     = s"Send money to ${receiver.name}-$receiverId"
+                description     = s"Send money to ${receiver.name}-${receiver.id}"
               )
               if (success) {
                 val receiverTx = Transaction.create(
@@ -47,19 +59,30 @@ class TransactionService(
                   amount          = amount,
                   transactionType = AddMoney,
                   status          = Successful,
-                  description     = s"Received money from ${sender.name}-$senderId"
+                  description     = s"Received money from ${sender.name}-${sender.id}"
                 )
 
                 (for {
                   s <- transactionRepo.create(senderTx)
                   _ <- transactionRepo.create(receiverTx)
                 } yield s).flatMap { transaction =>
+                  emailClient.sendMail(
+                    to      = sender.email,
+                    subject = s"SendMe Transaction #${transaction.code}",
+                    content = s"Your request to send NGN $amount to ${receiver.name} was ${transaction.status}"
+                  )
+
+                  emailClient.sendMail(
+                    to      = receiver.email,
+                    subject = s"SendMe Transaction #${transaction.code}",
+                    content = s"You have just received NGN $amount from ${sender.name}"
+                  )
                   Future.successful(transaction)
                 }
               }
               else {
                 transactionRepo.create(senderTx.copy(status = Failed.toString)).flatMap { _ =>
-                  Future.failed(new Exception(s"Error creating failed transaction for $senderId"))
+                  Future.failed(new Exception(s"Error creating failed transaction for ${sender.id}"))
                 }
               }
             }
@@ -67,14 +90,15 @@ class TransactionService(
     }
   }
 
-  private def getUserInfoAndAccount(userId: Int): Future[(User, Account)] =
+  private def getUserInfoAndAccount(accountId: Int): Future[(User, Account)] =
     (for {
-      user <- userRepo.findById(userId)
-      account <- accountRepo.findOneByUser(userId)
-    } yield (user, account)).flatMap {
-      case (None, None)                => Future.failed(ApiException(NotFound, "The account does not exist"))
-      case (Some(user), Some(account)) => Future.successful(user -> account)
-    }
+      account <- accountRepo.findById(accountId)
+      user <- userRepo.findById(account.get.userId)
+    } yield (user, account))
+      .recoverWith { _ => Future.failed(ApiException(NotFound, s"The account [$accountId] does not exist")) }
+      .flatMap { case (Some(user), Some(account)) =>
+        Future.successful(user -> account)
+      }
 
   private def sendMoneyTransaction(senderId: Int, receiverId: Int, amount: Double): Future[Boolean] =
     for {
@@ -86,24 +110,28 @@ class TransactionService(
   def addMoney(amount: Double, accountId: Int): Future[Transaction] = {
     if (amount < 100.0) Future.failed(ApiException(BadRequest, "Amount should not be lower than 100.00"))
     else {
-      accountRepo.findById(accountId).flatMap {
-        case None          =>
-          Future.failed(ApiException(NotFound, "The account could not be found"))
-        case Some(account) =>
-          paymentClient.receivePayment(amount, account).flatMap { _ =>
-            val transaction = Transaction.create(
-              account         = account,
-              amount          = amount,
-              transactionType = AddMoney,
-              status          = Successful,
-              description     = "Added money to account"
-            )
+      getUserInfoAndAccount(accountId).flatMap { case (user, account) =>
+        paymentClient.receivePayment(amount, account).flatMap { _ =>
+          val transaction = Transaction.create(
+            account         = account,
+            amount          = amount,
+            transactionType = AddMoney,
+            status          = Successful,
+            description     = "Added money to account"
+          )
 
-            for {
-              _ <- accountRepo.updateAmount(accountId, amount)
-              transaction <- transactionRepo.create(transaction)
-            } yield transaction
+          for {
+            _ <- accountRepo.updateAmount(accountId, amount)
+            transaction <- transactionRepo.create(transaction)
+          } yield {
+            emailClient.sendMail(
+              to      = user.email,
+              subject = s"SendMe Transaction #${transaction.code}",
+              content = s"Your request to top up your account with NGN $amount was ${transaction.status}.\n\n"
+            )
+            transaction
           }
+        }
       }
     }
   }
@@ -123,7 +151,8 @@ object TransactionService {
     userRepository: UserRepository,
     accountRepository: AccountRepository,
     transactionRepository: TransactionRepository,
-    paymentClient: PaymentClient
+    paymentClient: PaymentClient,
+    emailClient: EmailClient
   )(implicit ec: ExecutionContext) =
-    new TransactionService(userRepository, accountRepository, transactionRepository, paymentClient)
+    new TransactionService(userRepository, accountRepository, transactionRepository, paymentClient, emailClient)
 }
